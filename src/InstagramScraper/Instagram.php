@@ -886,7 +886,16 @@ class Instagram
     public function getAccountById($id)
     {
         $username = $this->getUsernameById($id);
-        return $this->getAccount($username);
+
+        do {
+            try {
+                $account = $this->getAccount($username);
+            } catch (InstagramNotFoundException $exception) {
+                //echo 'retry' . PHP_EOL;
+            }
+        } while (!($account ?? null));
+
+        return $account;
     }
 
     /**
