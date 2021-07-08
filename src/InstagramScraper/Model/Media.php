@@ -96,6 +96,11 @@ class Media extends AbstractModel
     protected $videoStandardResolutionUrl = '';
 
     /**
+     * @var integer
+     */
+    protected $videoDuration = '';
+
+    /**
      * @var string
      */
     protected $videoLowBandwidthUrl = '';
@@ -121,6 +126,11 @@ class Media extends AbstractModel
     protected $likesCount = 0;
 
     /**
+     * @var boolean
+     */
+    protected $hasLiked = null;
+
+    /**
      * @var
      */
     protected $locationId;
@@ -129,6 +139,11 @@ class Media extends AbstractModel
      * @var string
      */
     protected $locationName = '';
+
+    /**
+     * @var bool
+     */
+    protected $commentsDisabled = false;
 
     /**
      * @var string
@@ -171,6 +186,19 @@ class Media extends AbstractModel
     protected $altText;
 
     /**
+     * @var string
+     */
+    protected $locationAddressJson;
+    /**
+     * @var array
+     */
+    protected $taggedUsers=[];
+    /**
+     * @var array
+     */
+    protected $taggedUsersIds=[];
+
+    /**
      * @param string $code
      *
      * @return int
@@ -211,9 +239,25 @@ class Media extends AbstractModel
         while ($id > 0) {
             $remainder = $id % 64;
             $id = ($id - $remainder) / 64;
-            $code = $alphabet{$remainder} . $code;
-        };
+            $code = $alphabet[$remainder] . $code;
+        }
         return $code;
+    }
+
+    /**
+     * @return array
+     */
+    public function getTaggedUsers(): array
+    {
+        return $this->taggedUsers;
+    }
+
+    /**
+     * @return array
+     */
+    public function getTaggedUsersIds(): array
+    {
+        return $this->taggedUsersIds;
     }
 
     /**
@@ -347,6 +391,14 @@ class Media extends AbstractModel
     }
 
     /**
+     * @return integer
+     */
+    public function getVideoDuration()
+    {
+        return $this->videoDuration;
+    }
+
+    /**
      * @return string
      */
     public function getVideoLowBandwidthUrl()
@@ -379,6 +431,14 @@ class Media extends AbstractModel
     }
 
     /**
+     * @return boolean
+     */
+    public function getHasLiked()
+    {
+        return $this->hasLiked;
+    }
+
+    /**
      * @return mixed
      */
     public function getLocationId()
@@ -392,6 +452,22 @@ class Media extends AbstractModel
     public function getLocationName()
     {
         return $this->locationName;
+    }
+
+    /**
+     * @param string
+     */
+    public function setLocationName($name)
+    {
+        $this->locationName = $name;
+    }
+
+    /**
+     * @return bool
+     */
+    public function getCommentsDisabled()
+    {
+        return $this->commentsDisabled;
     }
 
     /**
@@ -449,12 +525,37 @@ class Media extends AbstractModel
     {
         return $this->locationSlug;
     }
+
+    /**
+     * @param string
+     */
+    public function setLocationSlug($slug)
+    {
+        $this->locationSlug = $slug;
+    }
+
     /**
      * @return string
      */
     public function getAltText()
     {
         return $this->altText;
+    }
+
+    /**
+     * @return string
+     */
+    public function getLocationAddressJson()
+    {
+        return $this->locationAddressJson;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getLocationAddress()
+    {
+        return json_decode($this->locationAddressJson);
     }
 
     /**
@@ -470,19 +571,26 @@ class Media extends AbstractModel
             case 'type':
                 $this->type = $value;
                 break;
+            case 'date':
             case 'created_time':
                 $this->createdTime = (int)$value;
                 break;
             case 'code':
+            case 'shortcode':
                 $this->shortCode = $value;
                 $this->link = Endpoints::getMediaPageLink($this->shortCode);
                 break;
             case 'link':
                 $this->link = $value;
                 break;
+            case 'comments_disabled':
+                $this->commentsDisabled = $value;
+                break;
             case 'comments':
                 $this->commentsCount = $arr[$prop]['count'];
                 break;
+            case 'edge_liked_by':
+            case 'edge_media_preview_like':
             case 'likes':
                 $this->likesCount = $arr[$prop]['count'];
                 break;
@@ -532,7 +640,7 @@ class Media extends AbstractModel
                 $this->caption = $arr[$prop];
                 break;
             case 'accessibility_caption':
-                $this->caption = $value;
+                $this->altText = $value;
                 break;
             case 'video_views':
                 $this->videoViews = $value;
@@ -542,6 +650,9 @@ class Media extends AbstractModel
                 $this->videoLowResolutionUrl = $arr[$prop]['low_resolution']['url'];
                 $this->videoStandardResolutionUrl = $arr[$prop]['standard_resolution']['url'];
                 $this->videoLowBandwidthUrl = $arr[$prop]['low_bandwidth']['url'];
+                break;
+            case 'video_duration':
+                $this->videoDuration = $arr[$prop];
                 break;
             case 'video_resources':
                 foreach ($value as $video) {
@@ -554,10 +665,14 @@ class Media extends AbstractModel
                 }
                 break;
             case 'location':
-                $this->locationId = $arr[$prop]['id'];
-                $this->locationName = $arr[$prop]['name'];
-                $this->locationSlug = $arr[$prop]['slug'];
+                if (isset($arr[$prop])) {
+                    $this->locationId = $arr[$prop]['id'] ? $arr[$prop]['id'] : null;
+                    $this->locationName = $arr[$prop]['name'] ? $arr[$prop]['name'] : null;
+                    $this->locationSlug = $arr[$prop]['slug'] ? $arr[$prop]['slug'] : null;
+                    $this->locationAddressJson = isset($arr[$prop]['address_json']) ? $arr[$prop]['address_json'] : null;
+                }
                 break;
+            case 'owner':
             case 'user':
                 $this->owner = Account::create($arr[$prop]);
                 break;
@@ -581,13 +696,10 @@ class Media extends AbstractModel
             case 'taken_at_timestamp':
                 $this->createdTime = $value;
                 break;
-            case 'shortcode':
-                $this->shortCode = $value;
-                $this->link = Endpoints::getMediaPageLink($this->shortCode);
-                break;
+
             case 'edge_media_preview_comment':
                 if (isset($arr[$prop]['count'])) {
-                    $this->commentsCount = (int) $arr[$prop]['count'];
+                    $this->commentsCount = (int)$arr[$prop]['count'];
                 }
                 if (isset($arr[$prop]['edges']) && is_array($arr[$prop]['edges'])) {
                     foreach ($arr[$prop]['edges'] as $commentData) {
@@ -598,7 +710,7 @@ class Media extends AbstractModel
             case 'edge_media_to_comment':
             case 'edge_media_to_parent_comment':
                 if (isset($arr[$prop]['count'])) {
-                    $this->commentsCount = (int) $arr[$prop]['count'];
+                    $this->commentsCount = (int)$arr[$prop]['count'];
                 }
                 if (isset($arr[$prop]['edges']) && is_array($arr[$prop]['edges'])) {
                     foreach ($arr[$prop]['edges'] as $commentData) {
@@ -606,17 +718,15 @@ class Media extends AbstractModel
                     }
                 }
                 if (isset($arr[$prop]['page_info']['has_next_page'])) {
-                    $this->hasMoreComments = (bool) $arr[$prop]['page_info']['has_next_page'];
+                    $this->hasMoreComments = (bool)$arr[$prop]['page_info']['has_next_page'];
                 }
                 if (isset($arr[$prop]['page_info']['end_cursor'])) {
-                    $this->commentsNextPage = (string) $arr[$prop]['page_info']['end_cursor'];
+                    $this->commentsNextPage = (string)$arr[$prop]['page_info']['end_cursor'];
                 }
                 break;
-            case 'edge_media_preview_like':
-                $this->likesCount = $arr[$prop]['count'];
-                break;
-            case 'edge_liked_by':
-                $this->likesCount = $arr[$prop]['count'];
+
+            case 'viewer_has_liked':
+                $this->hasLiked = $arr[$prop];
                 break;
             case 'edge_media_to_caption':
                 if (is_array($arr[$prop]['edges']) && !empty($arr[$prop]['edges'])) {
@@ -640,19 +750,31 @@ class Media extends AbstractModel
                     $this->sidecarMedias[] = static::create($edge['node']);
                 }
                 break;
-            case 'owner':
-                $this->owner = Account::create($arr[$prop]);
-                break;
-            case 'date':
-                $this->createdTime = (int)$value;
+            case 'edge_media_to_tagged_user':
+                if (!is_array($arr[$prop]['edges'])) {
+                    break;
+                }
+                foreach ($arr[$prop]['edges'] as $edge) {
+                    if (!isset($edge['node'])) {
+                        continue;
+                    }
+
+                    $this->taggedUsers[] = $edge['node']['user'] ?? [];
+                    $this->taggedUsersIds[] = $edge['node']['user']['id'] ?? '';
+                }
+
                 break;
             case '__typename':
-                if ($value == 'GraphImage') {
+                if ($value == 'GraphImage' || $value == 'GraphStoryImage') {
                     $this->type = static::TYPE_IMAGE;
-                } else if ($value == 'GraphVideo') {
-                    $this->type = static::TYPE_VIDEO;
-                } else if ($value == 'GraphSidecar') {
-                    $this->type = static::TYPE_SIDECAR;
+                } else {
+                    if ($value == 'GraphVideo' || $value == 'GraphStoryVideo') {
+                        $this->type = static::TYPE_VIDEO;
+                    } else {
+                        if ($value == 'GraphSidecar') {
+                            $this->type = static::TYPE_SIDECAR;
+                        }
+                    }
                 }
                 break;
         }
