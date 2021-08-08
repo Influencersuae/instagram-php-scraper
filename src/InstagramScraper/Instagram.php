@@ -586,7 +586,7 @@ class Instagram
         while ($index < $count && $isMoreAvailable) {
             $variables = json_encode([
                 'id' => (string)$id,
-                'first' => (string)$count,
+                'first' => (string)24,
                 'after' => (string)$maxId
             ]);
 
@@ -714,7 +714,7 @@ class Instagram
         }
 
         $mediaArray = $this->decodeRawBodyToJson($response->raw_body);
-        
+
         return Media::create($mediaArray);
     }
 
